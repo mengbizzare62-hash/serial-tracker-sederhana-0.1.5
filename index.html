@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Serial Tracker Sederhana</title>
+<meta name="application-name" content="Serial Tracker Sederhana">
+<meta name="theme-color" content="#080808">
+<meta name="description" content="Pelacak sederhana untuk memantau progress serial yang ditonton.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="64x64" href="icons/favicon-64.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:#080808;color:#f5f5f5;
+    font-family:Arial,Helvetica,sans-serif;min-height:100vh;
+  }
+  button,input,select{font:inherit}
+  .app{max-width:760px;margin:auto;min-height:100vh;padding:22px}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+  h1{font-size:26px;margin:0;font-weight:700}
+  .sub{color:#888;font-size:13px;margin-top:6px}
+  .screen{display:none}.screen.active{display:block}
+  .serial-list{display:grid;gap:14px}
+  .card{
+    width:100%;display:flex;align-items:center;gap:15px;
+    padding:14px;border:1px solid #242424;border-radius:16px;
+    background:#111;color:#fff;text-align:left;cursor:pointer;
+    transition:.18s;
+  }
+  .card:hover{background:#161616;border-color:#3a3a3a}
+  .cover{
+    width:70px;height:88px;border-radius:10px;object-fit:cover;
+    background:#202020;display:flex;align-items:center;justify-content:center;
+    color:#666;font-size:11px;flex:none;
+  }
+  .card-info{min-width:0;flex:1}
+  .name{font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meta{color:#888;font-size:13px;margin:7px 0}
+  .bar{height:7px;background:#272727;border-radius:99px;overflow:hidden}
+  .fill{height:100%;background:#f5f5f5;border-radius:99px;transition:.25s}
+  .percent{font-size:12px;color:#999;margin-top:6px}
+  .add{
+    width:100%;padding:15px;border:1px dashed #444;border-radius:16px;
+    background:transparent;color:#aaa;cursor:pointer;margin-top:15px;
+  }
+  .add:hover{background:#111;color:#fff}
+  .empty{text-align:center;color:#777;padding:50px 20px;border:1px dashed #292929;border-radius:16px}
+  .back{background:none;border:0;color:#aaa;cursor:pointer;padding:0;font-size:15px}
+  .detail-head{display:flex;gap:18px;align-items:center;margin:22px 0}
+  .detail-cover{width:110px;height:145px;border-radius:14px;object-fit:cover;background:#1d1d1d}
+  .detail-name{font-size:24px;font-weight:700;margin-bottom:8px}
+  .status{color:#999;font-size:13px}
+  .panel{background:#111;border:1px solid #242424;border-radius:16px;padding:18px;margin-top:16px}
+  .big-percent{text-align:center;font-size:42px;font-weight:700;margin:8px 0}
+  .big-bar{height:10px;background:#292929;border-radius:99px;overflow:hidden}
+  .controls{display:flex;align-items:center;justify-content:center;gap:20px;margin:22px 0}
+  .control-btn{
+    width:48px;height:48px;border-radius:50%;border:1px solid #333;
+    background:#191919;color:#fff;cursor:pointer;font-size:24px;
+  }
+  .episode{text-align:center;font-size:18px;min-width:130px}
+  .row{display:flex;gap:10px}
+  .field{flex:1}
+  label{display:block;color:#888;font-size:12px;margin-bottom:7px}
+  input,select{
+    width:100%;background:#171717;color:#fff;border:1px solid #303030;
+    border-radius:10px;padding:12px;outline:none;
+  }
+  input:focus,select:focus{border-color:#666}
+  .primary,.danger{
+    border:0;border-radius:10px;padding:12px 15px;cursor:pointer;margin-top:12px;
+  }
+  .primary{background:#f5f5f5;color:#080808}
+  .danger{background:#2a1515;color:#ff8f8f}
+  .actions{display:flex;gap:10px;margin-top:10px}
+  .actions button{flex:1}
+  .modal{
+    position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;
+    align-items:center;justify-content:center;padding:20px;
+  }
+  .modal.show{display:flex}
+  .modal-box{
+    width:min(460px,100%);background:#111;border:1px solid #292929;
+    border-radius:18px;padding:20px;
+  }
+  .modal-title{font-size:20px;font-weight:700;margin-bottom:18px}
+  .close{float:right;background:none;border:0;color:#888;font-size:22px;cursor:pointer}
+  .hint{font-size:12px;color:#777;margin-top:8px;line-height:1.4}
+  @media(max-width:480px){
+    .app{padding:18px}.detail-cover{width:90px;height:120px}
+    .detail-name{font-size:20px}
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <section id="home" class="screen active">
+    <header>
+      <div>
+        <h1>Serial Tracker Sederhana</h1>
+        <div class="sub">Pantau sampai episode mana kamu menonton.</div>
+        <div class="sub" style="margin-top:4px">v0.1.5</div>
+      </div>
+    </header>
+    <div id="serialList" class="serial-list"></div>
+    <button id="addBtn" class="add" onclick="openModal()">＋ Tambah Serial</button>
+  </section>
+
+  <section id="detail" class="screen">
+    <button class="back" onclick="goHome()">← Kembali</button>
+
+    <div class="detail-head">
+      <img id="detailCover" class="detail-cover" alt="Cover">
+      <div>
+        <div id="detailName" class="detail-name"></div>
+        <div id="detailStatus" class="status"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div id="bigPercent" class="big-percent">0%</div>
+      <div class="big-bar"><div id="bigFill" class="fill"></div></div>
+      <div class="controls">
+        <button class="control-btn" onclick="changeEpisode(-1)">−</button>
+        <div id="episodeText" class="episode">Episode 0 / 0</div>
+        <button class="control-btn" onclick="changeEpisode(1)">＋</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <div class="field">
+          <label>Episode terakhir</label>
+          <input id="episodeInput" type="number" min="0" onchange="setEpisode(this.value)">
+        </div>
+        <div class="field">
+          <label>Total episode</label>
+          <input id="totalInput" type="number" min="1" onchange="setTotal(this.value)">
+        </div>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label>Status</label>
+        <select id="statusInput" onchange="setStatus(this.value)">
+          <option>Watching</option>
+          <option>Completed</option>
+          <option>On Hold</option>
+          <option>Plan to Watch</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button class="danger" onclick="deleteCurrent()">Hapus Serial</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="modal" class="modal">
+  <div class="modal-box">
+    <button class="close" onclick="closeModal()">×</button>
+    <div class="modal-title">Tambah Serial</div>
+
+    <label>Nama Serial</label>
+    <input id="nameInput" placeholder="Contoh: One Piece">
+
+    <label style="margin-top:14px">Total Episode</label>
+    <input id="newTotal" type="number" min="1" placeholder="Contoh: 24">
+
+    <label style="margin-top:14px">Cover dari Foto/Galeri HP</label>
+    <input id="fileInput" type="file" accept="image/*" onchange="previewSelectedImage(this)">
+    <div id="selectedImageName" class="hint">Pilih gambar dari Galeri/Google Photos yang tersedia di perangkat.</div>
+
+    <label style="margin-top:14px">Atau gunakan Link Gambar</label>
+    <input id="imageInput" type="url" inputmode="url" placeholder="https://contoh.com/gambar.jpg">
+    <div class="hint">Gunakan URL langsung menuju file gambar (JPG, PNG, WEBP), bukan link halaman Google Images atau halaman website.</div>
+    <div id="imagePreview" style="display:none;margin-top:12px">
+      <img id="previewImg" style="width:80px;height:105px;object-fit:cover;border-radius:10px;border:1px solid #333" alt="Preview">
+    </div>
+
+    <button class="primary" onclick="addSerial()">Simpan Serial</button>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = "serialProgressData";
+let serials = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+let currentId = null;
+
+function save(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(serials));
+}
+
+function escapeHTML(str){
+  return String(str).replace(/[&<>"']/g, m => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[m]));
+}
+
+function progress(s){
+  if(!s.total || s.total < 1) return 0;
+  return Math.min(100, Math.round((s.episode / s.total) * 100));
+}
+
+function renderHome(){
+  const list = document.getElementById("serialList");
+  const addBtn = document.getElementById("addBtn");
+
+  if(serials.length === 0){
+    list.innerHTML = `<div class="empty">Belum ada serial.<br>Tambahkan serial pertamamu.</div>`;
+  } else {
+    list.innerHTML = serials.map(s => {
+      const p = progress(s);
+      const cover = s.image
+        ? `<img class="cover" src="${escapeHTML(s.image)}" alt="Cover">`
+        : `<div class="cover">NO IMAGE</div>`;
+      return `
+        <button class="card" onclick="openDetail('${s.id}')">
+          ${cover}
+          <div class="card-info">
+            <div class="name">${escapeHTML(s.name)}</div>
+            <div class="meta">${escapeHTML(s.status)} · Episode ${s.episode} / ${s.total}</div>
+            <div class="bar"><div class="fill" style="width:${p}%"></div></div>
+            <div class="percent">${p}% selesai</div>
+          </div>
+        </button>`;
+    }).join("");
+  }
+
+  addBtn.style.display = serials.length >= 2 ? "none" : "block";
+}
+
+function openModal(){
+  if(serials.length >= 2) return;
+  document.getElementById("modal").classList.add("show");
+  document.getElementById("nameInput").focus();
+}
+function closeModal(){
+  document.getElementById("modal").classList.remove("show");
+  ["nameInput","newTotal","imageInput","fileInput"].forEach(id => document.getElementById(id).value="");
+  document.getElementById("selectedImageName").textContent = "Pilih gambar dari Galeri/Google Photos yang tersedia di perangkat.";
+  document.getElementById("imagePreview").style.display = "none";
+}
+
+function previewSelectedImage(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  if(!file.type.startsWith("image/")){
+    alert("File yang dipilih harus berupa gambar.");
+    input.value = "";
+    return;
+  }
+  const url = URL.createObjectURL(file);
+  const img = document.getElementById("previewImg");
+  img.src = url;
+  document.getElementById("imagePreview").style.display = "block";
+  document.getElementById("selectedImageName").textContent = "Gambar dipilih: " + file.name;
+}
+
+function fileToDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addSerial(){
+  const name = document.getElementById("nameInput").value.trim();
+  const total = parseInt(document.getElementById("newTotal").value);
+  const imageUrl = document.getElementById("imageInput").value.trim();
+  const file = document.getElementById("fileInput").files[0];
+
+  if(!name) return alert("Nama serial belum diisi.");
+  if(!total || total < 1) return alert("Total episode harus diisi.");
+  if(imageUrl && !/^https?:\/\//i.test(imageUrl)) return alert("Link gambar harus diawali http:// atau https://");
+
+  let image = imageUrl;
+  if(file){
+    if(file.size > 5 * 1024 * 1024){
+      return alert("Ukuran gambar maksimal 5 MB.");
+    }
+    image = await fileToDataURL(file);
+  }
+
+  serials.push({
+    id: Date.now().toString(),
+    name, total, episode:0, image,
+    status:"Plan to Watch"
+  });
+  save(); closeModal(); renderHome();
+}
+
+function openDetail(id){
+  currentId = id;
+  document.getElementById("home").classList.remove("active");
+  document.getElementById("detail").classList.add("active");
+  renderDetail();
+}
+
+function goHome(){
+  currentId = null;
+  document.getElementById("detail").classList.remove("active");
+  document.getElementById("home").classList.add("active");
+  renderHome();
+}
+
+function getCurrent(){
+  return serials.find(s => s.id === currentId);
+}
+
+function renderDetail(){
+  const s = getCurrent();
+  if(!s) return goHome();
+
+  document.getElementById("detailName").textContent = s.name;
+  document.getElementById("detailStatus").textContent = s.status;
+  document.getElementById("episodeText").textContent = `Episode ${s.episode} / ${s.total}`;
+  document.getElementById("episodeInput").value = s.episode;
+  document.getElementById("totalInput").value = s.total;
+  document.getElementById("statusInput").value = s.status;
+
+  const p = progress(s);
+  document.getElementById("bigPercent").textContent = p + "%";
+  document.getElementById("bigFill").style.width = p + "%";
+
+  const img = document.getElementById("detailCover");
+  if(s.image){
+    img.src = s.image;
+    img.style.display = "block";
+    img.onerror = () => {
+      img.removeAttribute("src");
+      img.alt = "Gambar tidak dapat dimuat";
+    };
+  } else {
+    img.removeAttribute("src");
+  }
+}
+
+function changeEpisode(amount){
+  const s = getCurrent();
+  if(!s) return;
+  s.episode = Math.max(0, Math.min(s.total, s.episode + amount));
+  if(s.episode === s.total) s.status = "Completed";
+  else if(s.episode > 0 && s.status === "Plan to Watch") s.status = "Watching";
+  save(); renderDetail();
+}
+
+function setEpisode(value){
+  const s = getCurrent();
+  let n = parseInt(value);
+  if(isNaN(n)) n = 0;
+  s.episode = Math.max(0, Math.min(s.total, n));
+  if(s.episode === s.total) s.status = "Completed";
+  else if(s.episode > 0 && s.status === "Plan to Watch") s.status = "Watching";
+  save(); renderDetail();
+}
+
+function setTotal(value){
+  const s = getCurrent();
+  let n = parseInt(value);
+  if(isNaN(n) || n < 1) n = 1;
+  s.total = n;
+  s.episode = Math.min(s.episode, s.total);
+  if(s.episode === s.total) s.status = "Completed";
+  save(); renderDetail();
+}
+
+function setStatus(value){
+  const s = getCurrent();
+  s.status = value;
+  save(); renderDetail();
+}
+
+function deleteCurrent(){
+  const s = getCurrent();
+  if(!s) return;
+  if(confirm(`Hapus "${s.name}" dari daftar?`)){
+    serials = serials.filter(x => x.id !== currentId);
+    save(); goHome();
+  }
+}
+
+renderHome();
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
